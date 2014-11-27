@@ -28,13 +28,21 @@ int main(){
         /*child*/
         printMemStat();
 
+        /* the first modification phase */
         i = 0;
         for(; i<len/2; i++){
             array[i] = i+1;
         }
 
+        /* these codes will produce different results. */
+        /*i = 0;*/
+        /*for(; i<len/2; i++){*/
+            /*array[i*2] = i+1;*/
+        /*}*/
+
         printMemStat();
 
+        /* the second modification phase */
         i = 0;
         for(; i<len; i++){
             array[i] = i+1;
