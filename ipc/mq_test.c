@@ -1,5 +1,8 @@
 #include <errno.h>
 #include <mqueue.h>
+#include <assert.h>
+#include <string.h>
+#include <stdio.h>
 
 // gcc mq_test.c -o mq_test -lrt
 
