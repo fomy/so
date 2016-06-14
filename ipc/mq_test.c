@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <mqueue.h>
 
 // gcc mq_test.c -o mq_test -lrt
@@ -26,10 +27,10 @@ int main(int argc, char** argv)
 
 
 	struct mq_attr mqstat;
-	bzero(mqstat, sizeof(mqstat));
+	bzero(&mqstat, sizeof(mqstat));
 	int ret = mq_getattr(mq_fd, &mqstat);
 
-	printf("%ld, %ld, %ld, %ld\n", mqstat.mq_flasg, mqstat.mq_maxmsg,
+	printf("%ld, %ld, %ld, %ld\n", mqstat.mq_flags, mqstat.mq_maxmsg,
 			mqstat.mq_msgsize, mqstat.mq_curmsgs);
 
 	mq_close(mq_fd);
