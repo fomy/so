@@ -1,4 +1,3 @@
-#define _XOPEN_SOURCE
 #include <ucontext.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,17 +40,17 @@ int main(int argc, char *argv[])
 
     if (getcontext(&uctx_func2) == -1)
         handle_error("getcontext");
-    uctx_func2.uc_stack.ss_sp = func1_stack;
-    uctx_func2.uc_stack.ss_size = sizeof(func1_stack);
+    uctx_func2.uc_stack.ss_sp = func2_stack;
+    uctx_func2.uc_stack.ss_size = sizeof(func2_stack);
     uctx_func2.uc_link = &uctx_func1;
-    makecontext(&uctx_func1, func1, 0);
+    makecontext(&uctx_func2, func2, 0);
 
-    printf("swapcontext(&uctx_main, &uctx_fun2)");
+    printf("swapcontext(&uctx_main, &uctx_func2)\n");
     if (swapcontext(&uctx_main, &uctx_func2) == -1)
         handle_error("getcontext");
     
     printf("main returning\n");
-    return 0;
+    exit(0);
 
 }
 
