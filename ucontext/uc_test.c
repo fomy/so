@@ -1,3 +1,4 @@
+#define _XOPEN_SOURCE
 #include <ucontext.h>
 #include <stdio.h>
 #include <stdlib.h>
