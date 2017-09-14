@@ -30,29 +30,41 @@ def addr_insert(address_table, op_type, offset, size):
         size -= sector_size
         offset_aligned += sector_size
 
-def usage_of_rw(addr_table, cache_unit):
-    addr_bitmap = {}
-    for addr in addr_table.keys():
-        value = addr_table[addr]
-        if value[1] >= 1 and value[2] >= 1:
-            block_no = addr / cache_unit
-            subblock_no = (addr % cache_unit) / sector_size
-            if block_no not in addr_bitmap:
-                addr_bitmap[block_no] = 0
-            addr_bitmap[block_no] |= 1 << subblock_no 
+def read_only_addr_usage(addr_table, cache_unit):
+    read_only_blocks = {}
+    other_blocks = {}
+    for addr in addr_table:
+        block_no = addr / cache_unit
+        subblock_no = (addr % cache_unit) / sector_size
+        stat = addr_table[addr]
+        if block_no in other_blocks:
+            other_blocks[block_no] |= 1 << subblock_no
+            continue
+        if stat[2] == 0 or (stat[2] == 1 and stat[0] == 'w' and stat[1] > 0):
+            # read-only addr
+            if block_no not in read_only_blocks:
+                read_only_blocks[block_no] = 0 
+            read_only_blocks[block_no] |= 1 << subblock_no
+        else:
+            # other addr
+            bitmap = 0
+            if block_no in read_only_blocks:
+                bitmap = read_only_blocks.pop(block_no)
+            other_blocks[block_no] = bitmap | (1 << subblock_no)
 
     avg_usage = 0
-    block_count = 0.0
+    block_count = 0
     usage_table = {}
-    for block in addr_bitmap.keys():
-        bitmap = addr_bitmap[block]
-        bitmap_size = cache_unit/sector_size
-        count = 0
+
+    for block in other_blocks:
+        bitmap = other_blocks[block]
+        bitmap_size = cache_unit / sector_size
+        bit_count = 0
         while bitmap != 0:
             if (bitmap & 1) == 1:
-                count += 1
+                bit_count += 1
             bitmap = bitmap >> 1
-        usage = 1.0*count/bitmap_size
+        usage = 1.0 * bit_count / bitmap_size
 
         if usage not in usage_table:
             usage_table[usage] = 0
@@ -62,32 +74,24 @@ def usage_of_rw(addr_table, cache_unit):
         block_count += 1
 
     avg_usage /= block_count
-    #print usage_table
-    print "avg_usage =", avg_usage
-
-def usage_of_write_only(addr_table, cache_unit):
-    addr_bitmap = {}
-    for addr in addr_table.keys():
-        value = addr_table[addr]
-        if value[1] == 0 and value[2] > 1:
-            block_no = addr / cache_unit
-            subblock_no = (addr % cache_unit) / sector_size
-            if block_no not in addr_bitmap:
-                addr_bitmap[block_no] = 0
-            addr_bitmap[block_no] |= 1 << subblock_no 
+    print "--------usage table (", cache_unit, ")----------"
+    print "------------others-----------"
+    print "avg_usage =", avg_usage, "block_count =", block_count 
+    print_table_in_order(usage_table)
 
     avg_usage = 0
-    block_count = 0.0
+    block_count = 0
     usage_table = {}
-    for block in addr_bitmap.keys():
-        bitmap = addr_bitmap[block]
-        bitmap_size = cache_unit/sector_size
-        count = 0
+
+    for block in read_only_blocks:
+        bitmap = read_only_blocks[block]
+        bitmap_size = cache_unit / sector_size
+        bit_count = 0
         while bitmap != 0:
             if (bitmap & 1) == 1:
-                count += 1
+                bit_count += 1
             bitmap = bitmap >> 1
-        usage = 1.0*count/bitmap_size
+        usage = 1.0 * bit_count / bitmap_size
 
         if usage not in usage_table:
             usage_table[usage] = 0
@@ -97,45 +101,11 @@ def usage_of_write_only(addr_table, cache_unit):
         block_count += 1
 
     avg_usage /= block_count
-    #print usage_table
-    print "avg_usage =", avg_usage
+    print "-----------read-only-------------"
+    print "avg_usage =", avg_usage, "block_count =", block_count 
+    print_table_in_order(usage_table)
 
-def usage_of_read_only(addr_table, cache_unit):
-    addr_bitmap = {}
-    for addr in addr_table.keys():
-        value = addr_table[addr]
-        if value[1] > 1 and value[2] == 0:
-            block_no = addr / cache_unit
-            subblock_no = (addr % cache_unit) / sector_size
-            if block_no not in addr_bitmap:
-                addr_bitmap[block_no] = 0
-            addr_bitmap[block_no] |= 1 << subblock_no 
-
-    avg_usage = 0
-    block_count = 0.0
-    usage_table = {}
-    for block in addr_bitmap.keys():
-        bitmap = addr_bitmap[block]
-        bitmap_size = cache_unit/sector_size
-        count = 0
-        while bitmap != 0:
-            if (bitmap & 1) == 1:
-                count += 1
-            bitmap = bitmap >> 1
-        usage = 1.0*count/bitmap_size
-
-        if usage not in usage_table:
-            usage_table[usage] = 0
-        usage_table[usage] += 1
-
-        avg_usage += usage
-        block_count += 1
-
-    avg_usage /= block_count
-    #print usage_table
-    print "avg_usage =", avg_usage
-
-def analyze_addr_table(addr_table):
+def analyze_addr_pattern(addr_table):
     read_only = 0 # read only by many times
     write_only = 0 # write only by many times
     read_only_once = 0 # read by only once
@@ -186,6 +156,7 @@ def analyze_addr_table(addr_table):
             io_count += addr[1] + addr[2] 
             addr_count += 1
 
+    print "----------r/w patterns----------"
     print "table size, read_only_once, write_only_once, read_only, write_only, read_after_write, rw_hot_data"
     print len(addr_table)
     print addr_count, stat_addr_count 
@@ -248,36 +219,22 @@ def analyze(tracefile):
     print_table_in_order(write_size_table)
     print "------iodepth table--------"
     print_table_in_order(iodepth_table)
-    print "------r/w pattern analyzation------"
-    analyze_addr_table(address_table);
-    print "-----usage analyzation of read-only------"
-    usage_of_read_only(address_table, 1024*1024)
-    usage_of_read_only(address_table, 512*1024)
-    usage_of_read_only(address_table, 256*1024)
-    usage_of_read_only(address_table, 128*1024)
-    usage_of_read_only(address_table, 64*1024)
-    usage_of_read_only(address_table, 32*1024)
-    usage_of_read_only(address_table, 16*1024)
-    print "-----usage analyzation of write-only------"
-    usage_of_write_only(address_table, 1024*1024)
-    usage_of_write_only(address_table, 512*1024)
-    usage_of_write_only(address_table, 256*1024)
-    usage_of_write_only(address_table, 128*1024)
-    usage_of_write_only(address_table, 64*1024)
-    usage_of_write_only(address_table, 32*1024)
-    usage_of_write_only(address_table, 16*1024)
-    print "-----usage analyzation of rw------"
-    usage_of_rw(address_table, 1024*1024)
-    usage_of_rw(address_table, 512*1024)
-    usage_of_rw(address_table, 256*1024)
-    usage_of_rw(address_table, 128*1024)
-    usage_of_rw(address_table, 64*1024)
-    usage_of_rw(address_table, 32*1024)
-    usage_of_rw(address_table, 16*1024)
 
     fd.close()
+
+    return address_table
 
 if __name__ == "__main__":
     script, tracefile = argv
     print "running", script, "to analyze", tracefile
-    analyze(tracefile)
+    addr_table = analyze(tracefile)
+    analyze_addr_pattern(addr_table)
+    read_only_addr_usage(addr_table, 4096*1024)
+    read_only_addr_usage(addr_table, 1024*1024)
+    read_only_addr_usage(addr_table, 512*1024)
+    read_only_addr_usage(addr_table, 256*1024)
+    read_only_addr_usage(addr_table, 128*1024)
+    read_only_addr_usage(addr_table, 64*1024)
+    read_only_addr_usage(addr_table, 32*1024)
+    read_only_addr_usage(addr_table, 16*1024)
+
